@@ -119,6 +119,12 @@ class _BloodInventoryAdminPageState extends State<BloodInventoryAdminPage> {
               }
 
               final int qty = int.tryParse(quantityController.text) ?? 0;
+              
+              // منع القيم السالبة
+              if (qty < 0) {
+                showMessage("Quantity cannot be negative!", color: Colors.red);
+                return;
+              }
 
               await updateStock(bloodType, selectedHospital!, qty);
 
@@ -159,6 +165,16 @@ class _BloodInventoryAdminPageState extends State<BloodInventoryAdminPage> {
                 labelText: "Hospital Name",
                 border: OutlineInputBorder(),
               ),
+              textCapitalization: TextCapitalization.characters, // تحويل الحروف لكبيرة تلقائياً
+              onChanged: (value) {
+                // تحويل النص إلى حروف كبيرة أثناء الكتابة
+                if (value != value.toUpperCase()) {
+                  hospitalController.value = TextEditingValue(
+                    text: value.toUpperCase(),
+                    selection: TextSelection.collapsed(offset: value.toUpperCase().length),
+                  );
+                }
+              },
             ),
             const SizedBox(height: 16),
             TextField(
@@ -188,6 +204,17 @@ class _BloodInventoryAdminPageState extends State<BloodInventoryAdminPage> {
                 return;
               }
 
+              // تحويل اسم المستشفى إلى حروف كبيرة
+              String hospitalName = hospitalController.text.toUpperCase();
+              
+              final int qty = int.tryParse(quantityController.text) ?? 0;
+              
+              // منع القيم السالبة
+              if (qty < 0) {
+                showMessage("Quantity cannot be negative!", color: Colors.red);
+                return;
+              }
+
               bool hasInternet = await InternetService.hasInternet();
               if (!hasInternet) {
                 showMessage("❌ No Internet Connection", color: Colors.red);
@@ -205,20 +232,18 @@ class _BloodInventoryAdminPageState extends State<BloodInventoryAdminPage> {
                 hospitalsMap = Map<String, dynamic>.from(doc['hospitals'] ?? {});
               }
 
-              if (hospitalsMap.containsKey(hospitalController.text)) {
+              if (hospitalsMap.containsKey(hospitalName)) {
                 showMessage("Hospital already exists", color: Colors.red);
                 return;
               }
 
-              final int qty = int.tryParse(quantityController.text) ?? 0;
-
-              hospitalsMap[hospitalController.text] = qty;
+              hospitalsMap[hospitalName] = qty;
 
               await docRef.set({'hospitals': hospitalsMap});
 
               Navigator.pop(context);
               showMessage(
-                "${hospitalController.text} added with $qty bags ✅",
+                "$hospitalName added with $qty bags ✅",
                 color: Colors.green,
               );
             },
