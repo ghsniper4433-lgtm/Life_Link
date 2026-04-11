@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -9,21 +10,11 @@ class AdminPage extends StatefulWidget {
 }
 
 class _AdminPageState extends State<AdminPage> {
-
-  // الصفحة الحالية
   final String currentRoute = "adminHome";
-
-  // بيانات تجريبية للإحصائيات
-  int usersCount = 720;
-  int hospitalsCount = 90;
-  int bagsAvailable = 450;
-  int bagsReserved = 320;
-  int bagsToDeliver = 100;
-  int bagsDelivered = 280;
 
   void _navigateAndCloseDrawer(String routeName) {
     Navigator.of(context).pop();
-    Navigator.of(context).pushNamed(routeName);
+    Navigator.pushNamed(context, routeName);
   }
 
   Widget _buildDashboardCard(
@@ -44,45 +35,121 @@ class _AdminPageState extends State<AdminPage> {
                   fontSize: 24, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            Text(
-              title,
-              style: const TextStyle(fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
+            Text(title),
           ],
         ),
       ),
     );
   }
 
+  // ================= LOGOUT =================
   Future<void> _logout() async {
     await FirebaseAuth.instance.signOut();
-    Navigator.of(context).pushReplacementNamed("loginScreen");
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, "loginScreen");
+  }
+
+  // ================= حساب عدد المستشفيات من blood_inventory =================
+  Future<int> getHospitalsCount() async {
+    final bloodTypes = ['A+', 'A-', 'AB+', 'AB-', 'B+', 'B-', 'O+', 'O-'];
+    Set<String> uniqueHospitals = {};
+    
+    for (String bloodType in bloodTypes) {
+      final doc = await FirebaseFirestore.instance
+          .collection('blood_inventory')
+          .doc(bloodType)
+          .get();
+      
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (data.containsKey('hospitals')) {
+          Map<String, dynamic> hospitals = data['hospitals'];
+          // إضافة كل المستشفيات إلى المجموعة (Set) لتجنب التكرار
+          uniqueHospitals.addAll(hospitals.keys);
+        }
+      }
+    }
+    
+    return uniqueHospitals.length;
+  }
+
+  // ================= حساب عدد المستخدمين =================
+  Stream<int> getUsersCount() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .snapshots()
+        .map((s) => s.docs.length);
+  }
+
+  // ================= حساب الأكياس المتاحة =================
+  Future<int> getAvailableBags() async {
+    final bloodTypes = ['A+', 'A-', 'AB+', 'AB-', 'B+', 'B-', 'O+', 'O-'];
+    int totalAvailable = 0;
+    
+    for (String bloodType in bloodTypes) {
+      final doc = await FirebaseFirestore.instance
+          .collection('blood_inventory')
+          .doc(bloodType)
+          .get();
+      
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        if (data.containsKey('hospitals')) {
+          Map<String, dynamic> hospitals = data['hospitals'];
+          hospitals.forEach((hospital, count) {
+            if (count is int && count > 0) {
+              totalAvailable += count;
+            }
+          });
+        }
+      }
+    }
+    
+    return totalAvailable;
+  }
+
+  // ================= حساب الأكياس المحجوزة =================
+  Future<int> getReservedBags() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('orders')
+        .get();
+    
+    int totalQuantity = 0;
+    for (var doc in snapshot.docs) {
+      final quantityDynamic = doc['quantity'];
+      int quantity = 0;
+      if (quantityDynamic is int) {
+        quantity = quantityDynamic;
+      } else if (quantityDynamic is String) {
+        quantity = int.tryParse(quantityDynamic) ?? 0;
+      } else if (quantityDynamic is double) {
+        quantity = quantityDynamic.toInt();
+      }
+      totalQuantity += quantity;
+    }
+    
+    return totalQuantity;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        centerTitle: true,
         title: const Text("Admin Home"),
         backgroundColor: const Color(0xFF00A7B3),
-        iconTheme: const IconThemeData(color: Colors.white),
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu_open, color: Colors.white, size: 30),
-            onPressed: () => Scaffold.of(context).openDrawer(),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {});
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('جاري تحديث البيانات...')),
+              );
+            },
           ),
-        ),
-        titleTextStyle: const TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-          fontFamily: "Cairo",
-        ),
+        ],
       ),
 
-      // ================= Drawer =================
       drawer: Drawer(
         child: Column(
           children: [
@@ -92,140 +159,98 @@ class _AdminPageState extends State<AdminPage> {
               accountEmail: Text("admin@lifelink.com"),
               currentAccountPicture: CircleAvatar(
                 backgroundColor: Colors.white,
-                child: Icon(
-                  Icons.admin_panel_settings,
-                  color: Color(0xFF00A7B3),
-                  size: 40,
-                ),
+                child: Icon(Icons.admin_panel_settings,
+                    color: Color(0xFF00A7B3)),
               ),
             ),
-
-            // Admin Home (الصفحة الحالية)
             ListTile(
-              leading: Icon(
-                Icons.admin_panel_settings,
-                color: currentRoute == "adminHome"
-                    ? const Color(0xFF00A7B3)
-                    : Colors.black,
-              ),
-              title: Text(
-                "Admin Home",
-                style: TextStyle(
-                  color: currentRoute == "adminHome"
-                      ? const Color(0xFF00A7B3)
-                      : Colors.black,
-                  fontWeight: currentRoute == "adminHome"
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
+              leading: const Icon(Icons.admin_panel_settings),
+              title: const Text("Admin Home"),
               onTap: () => Navigator.pop(context),
             ),
-
-            // Blood Inventory
             ListTile(
-              leading: Icon(
-                Icons.inventory,
-                color: currentRoute == "bloodInventoryAdmin"
-                    ? const Color(0xFF00A7B3)
-                    : Colors.black,
-              ),
-              title: Text(
-                "Blood Inventory",
-                style: TextStyle(
-                  color: currentRoute == "bloodInventoryAdmin"
-                      ? const Color(0xFF00A7B3)
-                      : Colors.black,
-                  fontWeight: currentRoute == "bloodInventoryAdmin"
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
-              onTap: () =>
-                  _navigateAndCloseDrawer("bloodInventoryAdmin"),
+              leading: const Icon(Icons.inventory),
+              title: const Text("Blood Inventory"),
+              onTap: () => _navigateAndCloseDrawer("bloodInventoryAdmin"),
             ),
-
-            // Users
             ListTile(
-              leading: Icon(
-                Icons.people,
-                color: currentRoute == "usersAdmin"
-                    ? const Color(0xFF00A7B3)
-                    : Colors.black,
-              ),
-              title: Text(
-                "Users",
-                style: TextStyle(
-                  color: currentRoute == "usersAdmin"
-                      ? const Color(0xFF00A7B3)
-                      : Colors.black,
-                  fontWeight: currentRoute == "usersAdmin"
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
+              leading: const Icon(Icons.people),
+              title: const Text("Users"),
               onTap: () => _navigateAndCloseDrawer("usersAdmin"),
             ),
-
-            // Reports
             ListTile(
-              leading: Icon(
-                Icons.bar_chart,
-                color: currentRoute == "reportsAdmin"
-                    ? const Color(0xFF00A7B3)
-                    : Colors.black,
-              ),
-              title: Text(
-                "Reports",
-                style: TextStyle(
-                  color: currentRoute == "reportsAdmin"
-                      ? const Color(0xFF00A7B3)
-                      : Colors.black,
-                  fontWeight: currentRoute == "reportsAdmin"
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                ),
-              ),
+              leading: const Icon(Icons.bar_chart),
+              title: const Text("Reports"),
               onTap: () => _navigateAndCloseDrawer("reportsAdmin"),
             ),
-
             const Spacer(),
             const Divider(),
-
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text(
-                "Logout",
-                style: TextStyle(color: Colors.red),
-              ),
+              title: const Text("Logout", style: TextStyle(color: Colors.red)),
               onTap: _logout,
             ),
           ],
         ),
       ),
-      // ================= End Drawer =================
 
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: GridView.count(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: .9,
-          children: [
-            _buildDashboardCard(
-                "Users", usersCount, Icons.people, Colors.orange),
-            _buildDashboardCard("Hospitals", hospitalsCount,
-                Icons.local_hospital, Colors.red),
-            _buildDashboardCard(
-                "Available", bagsAvailable, Icons.inventory, Colors.blue),
-            _buildDashboardCard(
-                "Reserved", bagsReserved, Icons.pending_actions, Colors.green),
-            _buildDashboardCard("To Deliver", bagsToDeliver,
-                Icons.local_shipping, Colors.amber),
-            _buildDashboardCard(
-                "Delivered", bagsDelivered, Icons.check_circle, Colors.purple),
-          ],
+      body: RefreshIndicator(
+        onRefresh: () async {
+          setState(() {});
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: FutureBuilder(
+            future: Future.wait([
+              getUsersCount().first,
+              getHospitalsCount(),
+              getAvailableBags(),
+              getReservedBags(),
+            ]),
+            builder: (context, AsyncSnapshot<List<int>> snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              final usersCount = snapshot.data?[0] ?? 0;
+              final hospitalsCount = snapshot.data?[1] ?? 0;
+              final availableBags = snapshot.data?[2] ?? 0;
+              final reservedBags = snapshot.data?[3] ?? 0;
+              
+              return GridView.count(
+                crossAxisCount: 2,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: .9,
+                children: [
+                  _buildDashboardCard(
+                    "Users",
+                    usersCount,
+                    Icons.people,
+                    Colors.orange,
+                  ),
+                  _buildDashboardCard(
+                    "Hospitals",
+                    hospitalsCount,
+                    Icons.local_hospital,
+                    Colors.red,
+                  ),
+                  _buildDashboardCard(
+                    "Available",
+                    availableBags,
+                    Icons.inventory,
+                    Colors.blue,
+                  ),
+                  _buildDashboardCard(
+                    "Reserved",
+                    reservedBags,
+                    Icons.pending_actions,
+                    Colors.green,
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
