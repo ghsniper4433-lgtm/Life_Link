@@ -165,13 +165,13 @@ class _BloodInventoryAdminPageState extends State<BloodInventoryAdminPage> {
                 labelText: "Hospital Name",
                 border: OutlineInputBorder(),
               ),
-              textCapitalization: TextCapitalization.characters, // تحويل الحروف لكبيرة تلقائياً
+              textCapitalization: TextCapitalization.sentences, // Changed to sentences for proper case
               onChanged: (value) {
-                // تحويل النص إلى حروف كبيرة أثناء الكتابة
-                if (value != value.toUpperCase()) {
+                // تحويل النص إلى حروف صغيرة أثناء الكتابة
+                if (value != value.toLowerCase()) {
                   hospitalController.value = TextEditingValue(
-                    text: value.toUpperCase(),
-                    selection: TextSelection.collapsed(offset: value.toUpperCase().length),
+                    text: value.toLowerCase(),
+                    selection: TextSelection.collapsed(offset: value.toLowerCase().length),
                   );
                 }
               },
@@ -204,8 +204,8 @@ class _BloodInventoryAdminPageState extends State<BloodInventoryAdminPage> {
                 return;
               }
 
-              // تحويل اسم المستشفى إلى حروف كبيرة
-              String hospitalName = hospitalController.text.toUpperCase();
+              // تحويل اسم المستشفى إلى حروف صغيرة
+              String hospitalName = hospitalController.text.toLowerCase();
               
               final int qty = int.tryParse(quantityController.text) ?? 0;
               
